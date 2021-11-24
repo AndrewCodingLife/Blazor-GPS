@@ -1,0 +1,99 @@
+﻿@page "/gps"
+@using BrowserInterop.Extensions
+@using BrowserInterop.Geolocation
+@inject IJSRuntime _jsRuntime
+@implements IAsyncDisposable
+
+<h1>GPS</h1>
+<button type="button" @onclick="GetGeolocation">Get Current Position</button>
+<button type="button" @onclick="WatchPosition">Watch Position</button>
+<button type="button" @onclick="StopWatch">Stop Watch</button>
+
+@if (currentPosition != null)
+{
+    <div>
+        Current Position :
+        <ul>
+            <li>Latitude: @currentPosition.Coords.Latitude</li>
+            <li>Longitude: @currentPosition.Coords.Longitude</li>
+            <li>Altitude: @currentPosition.Coords.Altitude</li>
+            <li>Accuracy: @currentPosition.Coords.Accuracy</li>
+            <li>Altitude Accuracy: @currentPosition.Coords.AltitudeAccuracy</li>
+            <li>Heading: @currentPosition.Coords.Heading</li>
+            <li>Speed: @currentPosition.Coords.Speed</li>
+            <li>
+                <a target="_blank" href="@GetMapUrl()">View in Google Map</a>
+            </li>
+        </ul>
+    </div>
+}
+
+<br/>
+Position History:
+@foreach (var item in positionHistory)
+{
+    <div>
+        <ul>
+            <li>Latitude: @item.Coords.Latitude</li>
+            <li>Longitude: @item.Coords.Longitude</li>
+            <li>Altitude: @item.Coords.Altitude</li>
+            <li>Accuracy: @item.Coords.Accuracy</li>
+            <li>Altitude Accuracy: @item.Coords.AltitudeAccuracy</li>
+            <li>Heading: @item.Coords.Heading</li>
+            <li>Speed: @item.Coords.Speed</li>
+        </ul>
+    </div>
+}
+
+@code {
+    public WindowNavigatorGeolocation geolocationWrapper;
+    private GeolocationPosition currentPosition;
+    private readonly List<GeolocationPosition> positionHistory = new();
+    private IAsyncDisposable geopositionWatcher;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var window = await _jsRuntime.Window();
+        var navigator = await window.Navigator();
+        geolocationWrapper = navigator.Geolocation;
+    }
+
+    private async Task GetGeolocation()
+    {
+        currentPosition = (await geolocationWrapper.GetCurrentPosition(new PositionOptions
+        {
+            MaximumAgeTimeSpan = TimeSpan.FromHours(1),
+            TimeoutTimeSpan = TimeSpan.FromMinutes(1),
+            EnableHighAccuracy = true
+        })).Location;
+    }
+
+    private async Task WatchPosition()
+    {
+        geopositionWatcher = await geolocationWrapper.WatchPosition(async (p) =>
+        {
+            positionHistory.Add(p.Location);
+            StateHasChanged();
+        });
+    }
+
+    private async Task StopWatch()
+    {
+        if (geopositionWatcher != null)
+        {
+            await geopositionWatcher.DisposeAsync();
+            geopositionWatcher = null;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopWatch();
+    }
+
+    public string GetMapUrl()
+    {
+        return $"https://www.google.com/maps/@{currentPosition.Coords.Latitude},{currentPosition.Coords.Longitude},19.12z";
+    }
+
+}
